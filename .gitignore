@@ -1,0 +1,36 @@
+# data / model artifacts — never commit
+*.jsonl
+*.out
+*.pt
+*.parquet
+*.arrow
+data/
+representations/
+probes/
+corrections/
+generations/
+experiments/moc7b-*/
+hf_datasets/
+*.log
+*.csv
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+
+# large external repos (clone separately)
+MoC/
+CodeGuardPlus/
+PyVul/
+baxbench/
+
+# allow the results deck + docs
+!docs/*.pptx
