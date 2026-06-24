@@ -1,0 +1,23 @@
+# MoC pipeline (run inside the MoC repo)
+torch
+transformers
+numpy
+tqdm
+scikit-learn
+
+# downloading datasets (PrimeVul via HuggingFace)
+datasets
+
+# CodeGuard+ evaluation (run inside the CodeGuardPlus repo)
+libcst
+pandas
+scipy
+func_timeout
+flask
+markupsafe
+jinja2
+pycryptodome
+
+# External (install separately, not pip):
+#   - CodeQL CLI + query packs  -> ~/codeql  (CodeGuard+ security eval)
+#   - Docker                    -> CWEval / BaxBench (future)
