@@ -48,8 +48,10 @@ With strong web-CWE probes, we tested whether steering actually moves the output
 | L6 weaken, coeff 10 | **garbage** — output off-manifold (gibberish) |
 | multi-layer harden, coeff 1 | **garbage** — pass@1 75.8→3.0 (layer-0 corr norm = 224) |
 | L24 weaken, coeff 1 | **inert** — functionality preserved, security unmoved |
+| L24 weaken, coeff 3 | **faint partial control** — cwe-078 sec 5→3 with functionality intact; strong-probe CWEs (089/022/079) unchanged |
+| L24 weaken, coeff 5 | **breaking down** — 10/33 skipped, SyntaxErrors (heading to garbage) |
 
-**Conclusion: detectability ≠ controllability.** The secure-vs-vulnerable direction is **decodable** (probe ~0.8 after changed-line pooling) but **not causally steerable**. Across early (L6) and late (L24) layers, weak steering is inert and strong steering destroys the output — there is **no regime that cleanly changes security while keeping code valid**. There is also a **norm-calibration problem**: correction norms range 0.5 (L4) to 224 (L0), so a single coefficient cannot fit all layers.
+**Conclusion: detectability ≠ controllability.** The secure-vs-vulnerable direction is **decodable** (probe ~0.8 after changed-line pooling) but **barely controllable**. The trajectory at a late layer is `coeff 1 inert → coeff 3 faint/noisy partial control (valid output) → coeff 5 breaking → garbage`. The one place steering moved security without breaking code (L24, coeff 3) shifted only ~1–2 scenarios, on a *weak*-probe CWE (078) via collateral from the large summed web deltas — i.e. noisy and **not aligned with probe quality**. There is **no regime that cleanly/reliably changes security while keeping code valid**, plus a **norm-calibration problem**: correction norms range 0.5 (L4) to 224 (L0), so a single coefficient cannot fit all layers.
 
 ## Key takeaways
 1. **Changed-line pooling** is essential — whole-function pooling diluted the signal and made probes look unusable.
