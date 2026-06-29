@@ -26,6 +26,8 @@ See `docs/MASTER_ACTION_PLAN.md` and `docs/MEETING_SUMMARY_CodeGuard.md` for the
 ## Repo layout
 
 ```
+README.md  results.md  REPRODUCE.md  requirements.txt   # overview, numbers, run steps, deps
+
 adapters/
   codeguardplus/        # MoC <-> CodeGuard+ glue (the 3-piece adapter)
     export_codeguard_to_moc.py    # CodeGuard+ prompts  -> MoC prompt jsonl
@@ -37,9 +39,12 @@ adapters/
     primevul_to_sven.py           # PrimeVul (C/C++) paired -> data/<split>/<cwe>.jsonl
     pyvul_to_sven.py              # PyVul (Python) function-level + CWE map -> same format
 
-patches/                # small edits to MoC's moc_generate.py
-  patch_add_coeff.py              # add --coeff (scalar on the steering vector)
+patches/                # patches + drop-in scripts for the MoC repo (code/src/)
+  patch_add_coeff.py              # add --coeff (scalar on the steering vector) to moc_generate.py
   patch_combine_nt.py             # combine static (n) + dynamic (t) corrections
+  patch_changed_line_pooling.py   # get_representation.py: pool CHANGED lines (diff), not whole function
+  moc_generate_multilayer.py      # steer each CWE at its OWN best layer (multi-layer hooks)
+  train_probe_curve.py            # probe trainer w/ validation-over-training curve + early stopping (+ plot)
 
 experiments/            # driver scripts (run on a GPU box, in tmux/nohup)
   sweep_coeff.sh                  # coefficient sweep on the 33 in-scope scenarios
