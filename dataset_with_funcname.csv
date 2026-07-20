@@ -1,0 +1,872 @@
+cwe,lang,func_name,source,description,func_src_before,func_src_after
+cwe-787,c,copy_username,"Wheeler, Secure-Programs-HOWTO §6.2.1; CERT C STR31-C",strcpy into fixed buffer with no length check,"/* VULNERABLE: strcpy does not check destination buffer length */
+void copy_username(char *dst, const char *src) {
+    strcpy(dst, src);  /* CWE-787: src may be longer than dst */
+}","#include <string.h>
+/* SECURE: strncpy + explicit NUL-termination */
+void copy_username(char *dst, size_t dst_size, const char *src) {
+    strncpy(dst, src, dst_size - 1);
+    dst[dst_size - 1] = '\0';
+}"
+cwe-787,c,format_label,"Wheeler, Secure-Programs-HOWTO §6.2.1","sprintf with field-width (minimum, not max) allows overflow","#include <stdio.h>
+#define BUFFER_SIZE 64
+/* VULNERABLE: %*s specifies minimum width, not maximum */
+void format_label(const char *input) {
+    char buf[BUFFER_SIZE];
+    sprintf(buf, ""%*s"", sizeof(buf)-1, input);  /* WRONG */
+}","#include <stdio.h>
+#define BUFFER_SIZE 64
+/* SECURE: %.*s specifies maximum precision */
+void format_label(const char *input) {
+    char buf[BUFFER_SIZE];
+    sprintf(buf, ""%.*s"", (int)(sizeof(buf)-1), input);  /* RIGHT */
+}"
+cwe-787,c,read_line,CERT C STR35-C; Wheeler §6.2,gets() reads unbounded input into fixed buffer,"#include <stdio.h>
+/* VULNERABLE: gets() never checks buffer length */
+void read_line(char *buf) {
+    gets(buf);  /* CWE-787: can write past end of buf */
+}","#include <stdio.h>
+/* SECURE: fgets() limits read to buffer size */
+void read_line(char *buf, size_t buf_size) {
+    if (fgets(buf, (int)buf_size, stdin) == NULL) {
+        buf[0] = '\0';
+    }
+    /* strip trailing newline if present */
+    size_t len = strlen(buf);
+    if (len > 0 && buf[len-1] == '\n') buf[len-1] = '\0';
+}"
+cwe-787,c,append_suffix,CERT C STR31-C,strcat into fixed buffer without remaining-space check,"#include <string.h>
+#define MAX 64
+/* VULNERABLE: strcat does not check remaining space */
+void append_suffix(char *base, const char *suffix) {
+    strcat(base, suffix);  /* CWE-787 if base + suffix > MAX */
+}","#include <string.h>
+#define MAX 64
+/* SECURE: strncat limits bytes appended */
+void append_suffix(char *base, size_t base_size, const char *suffix) {
+    size_t base_len = strlen(base);
+    if (base_len >= base_size) return;
+    strncat(base, suffix, base_size - base_len - 1);
+}"
+cwe-787,c,copy_packet_payload,CERT C ARR38-C,memcpy with attacker-controlled length writes past destination,"#include <string.h>
+#include <stdint.h>
+#define BUF_SIZE 256
+/* VULNERABLE: length from untrusted source, no upper-bound check */
+void copy_packet_payload(uint8_t *dst, const uint8_t *src, size_t len) {
+    memcpy(dst, src, len);  /* CWE-787: len may exceed BUF_SIZE */
+}","#include <string.h>
+#include <stdint.h>
+#define BUF_SIZE 256
+/* SECURE: clamp length before copy */
+void copy_packet_payload(uint8_t *dst, const uint8_t *src, size_t len) {
+    if (len > BUF_SIZE) len = BUF_SIZE;
+    memcpy(dst, src, len);
+}"
+cwe-787,c,build_msg,CERT C STR31-C,snprintf misuse: buffer size passed as precision loses NUL terminator,"#include <stdio.h>
+#define BUF 32
+/* VULNERABLE: writes BUF chars + NUL = BUF+1 bytes when input == BUF chars */
+void build_msg(char *buf, const char *user) {
+    snprintf(buf, BUF + 1, ""Hello, %s!"", user);  /* off-by-one */
+}","#include <stdio.h>
+#define BUF 32
+/* SECURE: size argument is the true buffer size */
+void build_msg(char *buf, const char *user) {
+    snprintf(buf, BUF, ""Hello, %s!"", user);
+    buf[BUF - 1] = '\0';  /* guarantee NUL termination */
+}"
+cwe-125,c,get_element,CERT C ARR30-C,Array subscript from untrusted input without bounds check,"/* VULNERABLE: index from user input, no bounds check */
+int get_element(int *arr, int arr_size, int index) {
+    return arr[index];  /* CWE-125: index may be negative or >= arr_size */
+}","/* SECURE: validate index before access */
+int get_element(int *arr, int arr_size, int index) {
+    if (index < 0 || index >= arr_size) {
+        return -1;  /* or handle error */
+    }
+    return arr[index];
+}"
+cwe-125,c,check_prefix,CERT C STR32-C,strncmp called with length from attacker; may read past non-NUL-terminated buffer,"#include <string.h>
+/* VULNERABLE: n from attacker; buf may not be NUL-terminated within n bytes */
+int check_prefix(const char *buf, size_t n) {
+    return strncmp(buf, ""SECRET"", n) == 0;  /* CWE-125 if n > buf size */
+}","#include <string.h>
+#define PREFIX ""SECRET""
+/* SECURE: use known safe length, not attacker-supplied n */
+int check_prefix(const char *buf, size_t buf_size) {
+    size_t prefix_len = sizeof(PREFIX) - 1;
+    if (buf_size < prefix_len) return 0;
+    return strncmp(buf, PREFIX, prefix_len) == 0;
+}"
+cwe-125,c,packet_str_len,CERT C STR31-C; Wheeler §6.2,strlen on non-NUL-terminated buffer reads past end,"#include <string.h>
+/* VULNERABLE: buf from network packet, may not be NUL-terminated */
+size_t packet_str_len(const char *buf, size_t buf_size) {
+    return strlen(buf);  /* CWE-125: reads past buf if no NUL within buf_size */
+}","#include <string.h>
+/* SECURE: strnlen respects the known buffer limit */
+size_t packet_str_len(const char *buf, size_t buf_size) {
+    return strnlen(buf, buf_size);
+}"
+cwe-125,c,find_max,CERT C ARR30-C,Loop reads one element past array end due to wrong comparison,"#define N 8
+/* VULNERABLE: off-by-one, reads arr[N] which is out-of-bounds */
+int find_max(int arr[N]) {
+    int max = arr[0];
+    for (int i = 1; i <= N; i++) {   /* should be i < N */
+        if (arr[i] > max) max = arr[i];  /* CWE-125 at i == N */
+    }
+    return max;
+}","#define N 8
+/* SECURE: strict less-than keeps index in bounds */
+int find_max(int arr[N]) {
+    int max = arr[0];
+    for (int i = 1; i < N; i++) {
+        if (arr[i] > max) max = arr[i];
+    }
+    return max;
+}"
+cwe-125,c,extract_field,CERT C MEM35-C,memcpy source length from untrusted input reads past source buffer,"#include <string.h>
+#include <stdint.h>
+/* VULNERABLE: copy_len from header field, no check against src_size */
+void extract_field(uint8_t *dst, size_t dst_size,
+                   const uint8_t *src, size_t copy_len) {
+    memcpy(dst, src, copy_len);  /* CWE-125: copy_len may exceed actual src */
+}","#include <string.h>
+#include <stdint.h>
+/* SECURE: clamp to both dst and src sizes */
+void extract_field(uint8_t *dst, size_t dst_size,
+                   const uint8_t *src, size_t src_size, size_t copy_len) {
+    if (copy_len > src_size) copy_len = src_size;
+    if (copy_len > dst_size) copy_len = dst_size;
+    memcpy(dst, src, copy_len);
+}"
+cwe-190,c,safe_dup,"Wheeler, Secure-Programs-HOWTO §6.1 (Timo Sirainen example #3)",Integer overflow: len+1 wraps to 0 in malloc(),"#include <stdlib.h>
+#include <string.h>
+/* VULNERABLE: if len == SIZE_MAX, len+1 overflows to 0 -> malloc(0) */
+char *safe_dup(const char *src, size_t len) {
+    char *buf = malloc(len + 1);  /* CWE-190: +1 can overflow */
+    if (!buf) return NULL;
+    memcpy(buf, src, len);
+    buf[len] = '\0';
+    return buf;
+}","#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+/* SECURE: check for overflow before addition */
+char *safe_dup(const char *src, size_t len) {
+    if (len == SIZE_MAX) return NULL;  /* would overflow */
+    char *buf = malloc(len + 1);
+    if (!buf) return NULL;
+    memcpy(buf, src, len);
+    buf[len] = '\0';
+    return buf;
+}"
+cwe-190,c,read_data,"Wheeler, Secure-Programs-HOWTO §6.1 (Timo Sirainen example #1)",Signedness error: signed len cast to unsigned in malloc(),"#include <stdlib.h>
+/* VULNERABLE: negative len passes the >8000 check, cast to huge size_t */
+char *read_data(int fd) {
+    int len;
+    read(fd, &len, sizeof(len));
+    if (len > 8000) return NULL;        /* forgets to check len < 0 */
+    char *buf = malloc(len);            /* CWE-190: negative len -> huge size */
+    if (!buf) return NULL;
+    read(fd, buf, len);
+    return buf;
+}","#include <stdlib.h>
+/* SECURE: reject non-positive and too-large lengths */
+char *read_data(int fd) {
+    int len;
+    if (read(fd, &len, sizeof(len)) != sizeof(len)) return NULL;
+    if (len <= 0 || len > 8000) return NULL;  /* reject negative AND too large */
+    char *buf = malloc((size_t)len);
+    if (!buf) return NULL;
+    if (read(fd, buf, (size_t)len) != len) { free(buf); return NULL; }
+    return buf;
+}"
+cwe-190,c,alloc_matrix,CERT C INT32-C,Signed integer multiplication overflow in buffer size calculation,"#include <stdlib.h>
+/* VULNERABLE: rows*cols may overflow int before cast to size_t */
+int *alloc_matrix(int rows, int cols) {
+    int *mat = malloc(rows * cols * sizeof(int));  /* CWE-190 */
+    return mat;
+}","#include <stdlib.h>
+#include <limits.h>
+/* SECURE: check each multiplication individually using size_t arithmetic */
+int *alloc_matrix(int rows, int cols) {
+    if (rows <= 0 || cols <= 0) return NULL;
+    size_t r = (size_t)rows, c = (size_t)cols;
+    if (c != 0 && r > SIZE_MAX / c) return NULL;     /* overflow check */
+    if (r * c > SIZE_MAX / sizeof(int)) return NULL; /* second check */
+    return malloc(r * c * sizeof(int));
+}"
+cwe-190,c,alloc_array,CERT C INT30-C,Unsigned integer wrap-around used to compute allocation size,"#include <stdlib.h>
+#include <stdint.h>
+/* VULNERABLE: n * sizeof(uint32_t) wraps if n > SIZE_MAX/4 */
+uint32_t *alloc_array(size_t n) {
+    return malloc(n * sizeof(uint32_t));  /* CWE-190: silent wrap */
+}","#include <stdlib.h>
+#include <stdint.h>
+#include <limits.h>
+/* SECURE: check before multiplying */
+uint32_t *alloc_array(size_t n) {
+    if (n > SIZE_MAX / sizeof(uint32_t)) return NULL;
+    return malloc(n * sizeof(uint32_t));
+}"
+cwe-190,c,mymalloc,"Wheeler, Secure-Programs-HOWTO §6.1 (Timo Sirainen example #2)",Integer truncation: 64-bit size_t narrowed to 32-bit in custom allocator,"#include <stdlib.h>
+#include <stdint.h>
+/* VULNERABLE: unsigned int parameter truncates 64-bit size_t on 64-bit platforms */
+void *mymalloc(unsigned int size) {  /* CWE-190: truncation */
+    return malloc(size);
+}
+/* caller: */
+void use_mymalloc(size_t len) {
+    char *buf = mymalloc(len);   /* if len > UINT_MAX, truncated silently */
+    /* ... */
+}","#include <stdlib.h>
+#include <stdint.h>
+#include <limits.h>
+/* SECURE: keep size as size_t throughout */
+void *mymalloc(size_t size) {
+    return malloc(size);
+}
+void use_mymalloc(size_t len) {
+    char *buf = mymalloc(len);
+    /* ... */
+}"
+cwe-416,c,process,CERT C MEM30-C,Pointer used after free(),"#include <stdlib.h>
+#include <string.h>
+/* VULNERABLE: ptr used after free */
+void process(char *data, size_t len) {
+    char *buf = malloc(len);
+    if (!buf) return;
+    memcpy(buf, data, len);
+    free(buf);
+    buf[0] = '\0';  /* CWE-416: use after free */
+}","#include <stdlib.h>
+#include <string.h>
+/* SECURE: set pointer to NULL immediately after free */
+void process(char *data, size_t len) {
+    char *buf = malloc(len);
+    if (!buf) return;
+    memcpy(buf, data, len);
+    free(buf);
+    buf = NULL;  /* prevents accidental use after free */
+}"
+cwe-416,c,handler,CERT C MEM30-C,Double-free: free() called twice on same pointer,"#include <stdlib.h>
+/* VULNERABLE: free called in both branches and in cleanup */
+void handler(int err, char *buf) {
+    if (err) {
+        free(buf);   /* first free on error */
+        return;
+    }
+    /* ... use buf ... */
+    free(buf);   /* CWE-416: double free if err path already freed buf */
+}","#include <stdlib.h>
+/* SECURE: single ownership path; NULL-guard before free */
+void handler(int err, char **buf_p) {
+    if (err) {
+        free(*buf_p);
+        *buf_p = NULL;
+        return;
+    }
+    /* ... use *buf_p ... */
+    free(*buf_p);
+    *buf_p = NULL;
+}"
+cwe-416,c,free_list,CERT C MEM30-C,"Use-after-free in loop: element freed inside loop, accessed on next iteration","#include <stdlib.h>
+typedef struct Node { struct Node *next; int val; } Node;
+/* VULNERABLE: node freed, then node->next accessed */
+void free_list(Node *head) {
+    for (Node *n = head; n != NULL; n = n->next) {
+        free(n);   /* CWE-416: n->next accessed after free on next iteration */
+    }
+}","#include <stdlib.h>
+typedef struct Node { struct Node *next; int val; } Node;
+/* SECURE: save next pointer before freeing */
+void free_list(Node *head) {
+    Node *n = head;
+    while (n != NULL) {
+        Node *next = n->next;  /* save before free */
+        free(n);
+        n = next;
+    }
+}"
+cwe-416,c,grow_buf,CERT C MEM30-C,realloc failure path leaves original pointer freed,"#include <stdlib.h>
+/* VULNERABLE: if realloc returns NULL, original buf is freed by realloc
+   but buf is overwritten with NULL, losing the old pointer -> leak + UAF */
+char *grow_buf(char *buf, size_t new_size) {
+    buf = realloc(buf, new_size);  /* CWE-416: on failure buf is now NULL */
+    return buf;
+}","#include <stdlib.h>
+/* SECURE: use temp pointer so original is not lost on failure */
+char *grow_buf(char *buf, size_t new_size) {
+    char *tmp = realloc(buf, new_size);
+    if (!tmp) {
+        free(buf);   /* explicit cleanup of original */
+        return NULL;
+    }
+    return tmp;
+}"
+cwe-416,c,parse_token,CERT C MEM30-C,"Early return in error handling skips cleanup, leaving dangling pointer","#include <stdlib.h>
+#include <string.h>
+/* VULNERABLE: token freed early on error path but outer function may still hold ref */
+int parse_token(const char *input, char **out) {
+    char *token = strdup(input);
+    if (!token) return -1;
+    if (input[0] == '#') {
+        free(token);
+        return -2;   /* caller's *out not set, but token freed */
+    }
+    *out = token;
+    return 0;
+}","#include <stdlib.h>
+#include <string.h>
+/* SECURE: always initialise *out; free only on error paths */
+int parse_token(const char *input, char **out) {
+    *out = NULL;
+    char *token = strdup(input);
+    if (!token) return -1;
+    if (input[0] == '#') {
+        free(token);
+        return -2;
+    }
+    *out = token;
+    return 0;
+}"
+cwe-476,c,init_buffer,CERT C EXP34-C,malloc() return value not checked before dereference,"#include <stdlib.h>
+#include <string.h>
+/* VULNERABLE: malloc may return NULL; memset dereferences it */
+void init_buffer(size_t n) {
+    char *buf = malloc(n);
+    memset(buf, 0, n);  /* CWE-476: if malloc returned NULL */
+}","#include <stdlib.h>
+#include <string.h>
+/* SECURE: check for NULL before use */
+void init_buffer(size_t n) {
+    char *buf = malloc(n);
+    if (!buf) return;   /* or handle error */
+    memset(buf, 0, n);
+}"
+cwe-476,c,read_config,CERT C EXP34-C,fopen() return not checked; NULL file pointer passed to fread(),"#include <stdio.h>
+/* VULNERABLE: fopen returns NULL if file missing/no permission */
+size_t read_config(const char *path, char *buf, size_t size) {
+    FILE *f = fopen(path, ""r"");
+    return fread(buf, 1, size, f);  /* CWE-476: f may be NULL */
+}","#include <stdio.h>
+/* SECURE: check fopen return before use */
+size_t read_config(const char *path, char *buf, size_t size) {
+    FILE *f = fopen(path, ""r"");
+    if (!f) return 0;
+    size_t n = fread(buf, 1, size, f);
+    fclose(f);
+    return n;
+}"
+cwe-476,c,print_tokens,CERT C EXP34-C,strtok() returns NULL at end of string; NULL deref on next access,"#include <string.h>
+#include <stdio.h>
+/* VULNERABLE: strtok returns NULL when no more tokens */
+void print_tokens(char *str) {
+    char *tok = strtok(str, "","");
+    while (1) {
+        printf(""%s\n"", tok);  /* CWE-476: tok may be NULL */
+        tok = strtok(NULL, "","");
+    }
+}","#include <string.h>
+#include <stdio.h>
+/* SECURE: check token for NULL before use */
+void print_tokens(char *str) {
+    char *tok = strtok(str, "","");
+    while (tok != NULL) {
+        printf(""%s\n"", tok);
+        tok = strtok(NULL, "","");
+    }
+}"
+cwe-476,c,build_path,CERT C EXP34-C,getenv() return used without NULL check,"#include <stdlib.h>
+#include <string.h>
+/* VULNERABLE: HOME may not be set; getenv returns NULL */
+void build_path(char *out, size_t out_size, const char *rel) {
+    const char *home = getenv(""HOME"");
+    snprintf(out, out_size, ""%s/%s"", home, rel);  /* CWE-476 */
+}","#include <stdlib.h>
+#include <string.h>
+/* SECURE: guard against NULL return */
+void build_path(char *out, size_t out_size, const char *rel) {
+    const char *home = getenv(""HOME"");
+    if (!home) home = ""/tmp"";  /* safe fallback */
+    snprintf(out, out_size, ""%s/%s"", home, rel);
+}"
+cwe-476,c,contains_cmd,CERT C EXP34-C,Function returning pointer called without checking result,"#include <string.h>
+/* VULNERABLE: strstr may return NULL; caller dereferences without check */
+int contains_cmd(const char *input, int *offset) {
+    char *p = strstr(input, ""CMD"");
+    *offset = (int)(p - input);  /* CWE-476: p may be NULL */
+    return p != NULL;
+}","#include <string.h>
+/* SECURE: check return before arithmetic */
+int contains_cmd(const char *input, int *offset) {
+    char *p = strstr(input, ""CMD"");
+    if (!p) { *offset = -1; return 0; }
+    *offset = (int)(p - input);
+    return 1;
+}"
+cwe-022,c,open_user_file,"Wheeler, Secure-Programs-HOWTO §5.4; CERT C FIO02-C",User-supplied filename concatenated into path without canonicalization,"#include <stdio.h>
+#include <string.h>
+#define BASE ""/var/www/files/""
+/* VULNERABLE: user controls filename; ""../../../etc/passwd"" escapes BASE */
+FILE *open_user_file(const char *filename) {
+    char path[512];
+    snprintf(path, sizeof(path), ""%s%s"", BASE, filename);  /* CWE-022 */
+    return fopen(path, ""r"");
+}","#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#define BASE ""/var/www/files/""
+/* SECURE: canonicalize and verify path stays under BASE */
+FILE *open_user_file(const char *filename) {
+    char path[512];
+    snprintf(path, sizeof(path), ""%s%s"", BASE, filename);
+    char *resolved = realpath(path, NULL);
+    if (!resolved) return NULL;
+    if (strncmp(resolved, BASE, strlen(BASE)) != 0) {
+        free(resolved);
+        return NULL;  /* escaped base directory */
+    }
+    FILE *f = fopen(resolved, ""r"");
+    free(resolved);
+    return f;
+}"
+cwe-022,c,safe_open,CERT C FIO02-C,"Blocking only ""../"" is insufficient; encoded or OS-specific traversal bypasses check","#include <string.h>
+#include <stdio.h>
+/* VULNERABLE: naive ""../"" check bypassed by ""/etc/passwd"", ""..\\"" etc. */
+FILE *safe_open(const char *base, const char *name) {
+    if (strstr(name, ""../"") != NULL) return NULL;  /* insufficient guard */
+    char path[512];
+    snprintf(path, sizeof(path), ""%s/%s"", base, name);
+    return fopen(path, ""r"");
+}","#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+/* SECURE: resolve canonical path and verify prefix */
+FILE *safe_open(const char *base, const char *name) {
+    char raw[512];
+    snprintf(raw, sizeof(raw), ""%s/%s"", base, name);
+    char *real = realpath(raw, NULL);
+    if (!real) return NULL;
+    char *real_base = realpath(base, NULL);
+    if (!real_base) { free(real); return NULL; }
+    int ok = strncmp(real, real_base, strlen(real_base)) == 0;
+    free(real_base);
+    if (!ok) { free(real); return NULL; }
+    FILE *f = fopen(real, ""r"");
+    free(real);
+    return f;
+}"
+cwe-022,c,get_file,CERT C FIO02-C,File opened with user-controlled absolute path (no base directory enforced),"#include <stdio.h>
+/* VULNERABLE: accepts absolute paths from user input */
+FILE *get_file(const char *user_path) {
+    return fopen(user_path, ""r"");  /* CWE-022: any path accessible */
+}","#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#define ALLOWED_DIR ""/srv/data/""
+/* SECURE: enforce base directory */
+FILE *get_file(const char *user_path) {
+    /* reject absolute paths from user */
+    if (user_path[0] == '/') return NULL;
+    char raw[512];
+    snprintf(raw, sizeof(raw), ""%s%s"", ALLOWED_DIR, user_path);
+    char *canon = realpath(raw, NULL);
+    if (!canon) return NULL;
+    if (strncmp(canon, ALLOWED_DIR, strlen(ALLOWED_DIR)) != 0) {
+        free(canon);
+        return NULL;
+    }
+    FILE *f = fopen(canon, ""r"");
+    free(canon);
+    return f;
+}"
+cwe-022,c,open_in_sandbox,"Wheeler, Secure-Programs-HOWTO §5.4",chdir without chroot allows parent traversal via relative paths,"#include <unistd.h>
+#include <stdio.h>
+/* VULNERABLE: chdir alone does not prevent ""../"" traversal */
+FILE *open_in_sandbox(const char *sandbox, const char *name) {
+    chdir(sandbox);
+    return fopen(name, ""r"");  /* CWE-022: ""../../etc/passwd"" still works */
+}","#include <unistd.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+/* SECURE: chroot + validate name has no path separators */
+FILE *open_in_sandbox(const char *sandbox, const char *name) {
+    if (strchr(name, '/') || strchr(name, '\\')) return NULL;
+    char raw[512];
+    snprintf(raw, sizeof(raw), ""%s/%s"", sandbox, name);
+    char *canon = realpath(raw, NULL);
+    if (!canon) return NULL;
+    char *base = realpath(sandbox, NULL);
+    if (!base) { free(canon); return NULL; }
+    int ok = strncmp(canon, base, strlen(base)) == 0;
+    free(base);
+    if (!ok) { free(canon); return NULL; }
+    FILE *f = fopen(canon, ""r"");
+    free(canon);
+    return f;
+}"
+cwe-022,c,open_log,CERT C FIO02-C; Wheeler §5.4,Path built from multiple user components without join sanitization,"#include <stdio.h>
+#include <string.h>
+/* VULNERABLE: both dir and file come from user; no traversal check */
+FILE *open_log(const char *user_dir, const char *user_file) {
+    char path[512];
+    snprintf(path, sizeof(path), ""/logs/%s/%s"", user_dir, user_file);
+    return fopen(path, ""a"");  /* CWE-022 */
+}","#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#define LOG_BASE ""/logs/""
+/* SECURE: canonicalize after join; confirm base prefix */
+FILE *open_log(const char *user_dir, const char *user_file) {
+    char raw[512];
+    snprintf(raw, sizeof(raw), ""%s%s/%s"", LOG_BASE, user_dir, user_file);
+    char *canon = realpath(raw, NULL);
+    if (!canon) return NULL;
+    if (strncmp(canon, LOG_BASE, strlen(LOG_BASE)) != 0) {
+        free(canon);
+        return NULL;
+    }
+    FILE *f = fopen(canon, ""a"");
+    free(canon);
+    return f;
+}"
+cwe-787,cpp,insert_in_table,CERT C++ CTR50-CPP; https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr50-cpp,Signed int index allows negative values which pass the upper-bound check but cause an out-of-bounds write; fix changes pos to size_t,"#include <cstddef>
+
+/* VULNERABLE: signed int pos can be negative, bypassing upper-bound check */
+void insert_in_table(int *table, std::size_t tableSize, int pos, int value) {
+  if (pos >= (int)tableSize) {
+    return;  /* negative pos passes this check */
+  }
+  table[pos] = value;  /* CWE-787: negative pos writes before table start */
+}","#include <cstddef>
+
+/* SECURE: size_t pos cannot be negative */
+void insert_in_table(int *table, std::size_t tableSize, std::size_t pos, int value) {
+  if (pos >= tableSize) {
+    return;
+  }
+  table[pos] = value;
+}"
+cwe-787,cpp,insert_in_table_vec,CERT C++ CTR50-CPP; https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr50-cpp,std::vector indexed with signed long long; negative value may pass size() comparison due to implicit signed/unsigned conversion; fix uses size_t,"#include <vector>
+
+/* VULNERABLE: long long pos can be negative; implicit conversion may make
+   negative pos appear larger than table.size() check passes */
+void insert_in_table(std::vector<int> &table, long long pos, int value) {
+  if (pos >= (long long)table.size()) {
+    return;
+  }
+  table[pos] = value;  /* CWE-787: negative pos interpreted as huge unsigned index */
+}","#include <vector>
+
+/* SECURE: size_t pos cannot be negative */
+void insert_in_table(std::vector<int> &table, std::size_t pos, int value) {
+  if (pos >= table.size()) {
+    return;
+  }
+  table[pos] = value;
+}"
+cwe-125,cpp,insert_in_table_at,CERT C++ CTR50-CPP; https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr50-cpp,operator[] on std::vector performs no bounds check; fix uses at() which throws std::out_of_range on an invalid index,"#include <vector>
+
+/* VULNERABLE: operator[] has no bounds checking — silent OOB access */
+void insert_in_table(std::vector<int> &table, std::size_t pos, int value) {
+  if (pos >= table.size()) {
+    return;
+  }
+  table[pos] = value;  /* CWE-125: if size check is bypassed, UB */
+}","#include <vector>
+
+/* SECURE: at() throws std::out_of_range if pos is out of bounds */
+void insert_in_table(std::vector<int> &table, std::size_t pos, int value) noexcept(false) {
+  table.at(pos) = value;
+}"
+cwe-125,cpp,f_imp,CERT C++ CTR50-CPP; https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr50-cpp,do-while loop dereferences iterator before checking validity; if container is empty b equals e and the first dereference is undefined; fix checks b != e first,"#include <iterator>
+
+/* VULNERABLE: dereferences b before checking b != e; UB on empty range */
+template <typename ForwardIterator>
+void f_imp(ForwardIterator b, ForwardIterator e, int val,
+           std::forward_iterator_tag) {
+  do {
+    *b++ = val;  /* CWE-125: b may already equal e */
+  } while (b != e);
+}
+
+template <typename ForwardIterator>
+void f(ForwardIterator b, ForwardIterator e, int val) {
+  typename std::iterator_traits<ForwardIterator>::iterator_category cat;
+  f_imp(b, e, val, cat);
+}","#include <iterator>
+
+/* SECURE: checks validity before dereferencing */
+template <typename ForwardIterator>
+void f_imp(ForwardIterator b, ForwardIterator e, int val,
+           std::forward_iterator_tag) {
+  while (b != e) {
+    *b++ = val;
+  }
+}
+
+template <typename ForwardIterator>
+void f(ForwardIterator b, ForwardIterator e, int val) {
+  typename std::iterator_traits<ForwardIterator>::iterator_category cat;
+  f_imp(b, e, val, cat);
+}"
+cwe-416,cpp,g_delete_then_use,CERT C++ MEM50-CPP; https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem50-cpp,Object deleted then member function called through dangling pointer; write-after-free can enable arbitrary code execution; fix calls f() before delete,"#include <new>
+
+struct S { void f(); };
+
+/* VULNERABLE: s is used after being deleted (dangling pointer) */
+void g() noexcept(false) {
+  S *s = new S;
+  // ...
+  delete s;
+  // ...
+  s->f();  /* CWE-416: use after free -- undefined behavior */
+}","#include <new>
+
+struct S { void f(); };
+
+/* SECURE: use s before deleting it */
+void g() noexcept(false) {
+  S *s = new S;
+  // ...
+  s->f();
+  delete s;
+}"
+cwe-416,cpp,main_buff_scope,CERT C++ MEM50-CPP; https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem50-cpp,unique_ptr destroyed at end of inner try block; raw pointer s retains address of freed memory and is accessed after scope exit; fix moves buff to outer scope,"#include <iostream>
+#include <memory>
+#include <cstring>
+
+/* VULNERABLE: buff destroyed at end of try block; s points to freed memory */
+int main(int argc, const char *argv[]) {
+  const char *s = """";
+  if (argc > 1) {
+    enum { BufferSize = 32 };
+    try {
+      std::unique_ptr<char[]> buff(new char[BufferSize]);
+      std::memset(buff.get(), 0, BufferSize);
+      s = std::strncpy(buff.get(), argv[1], BufferSize - 1);
+    } catch (std::bad_alloc &) { }
+  }
+  std::cout << s << std::endl;  /* CWE-416: s may point to freed memory */
+}","#include <iostream>
+#include <memory>
+#include <cstring>
+
+/* SECURE: buff lifetime extended past point of use */
+int main(int argc, const char *argv[]) {
+  std::unique_ptr<char[]> buff;
+  const char *s = """";
+  if (argc > 1) {
+    enum { BufferSize = 32 };
+    try {
+      buff.reset(new char[BufferSize]);
+      std::memset(buff.get(), 0, BufferSize);
+      s = std::strncpy(buff.get(), argv[1], BufferSize - 1);
+    } catch (std::bad_alloc &) { }
+  }
+  std::cout << s << std::endl;
+}"
+cwe-416,cpp,f_cstr_dangling,CERT C++ MEM50-CPP; https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem50-cpp,c_str() called on a temporary std::string; the temporary is destroyed at end of expression leaving str a dangling pointer; fix stores string in named variable,"#include <string>
+
+std::string str_func();
+void display_string(const char *);
+
+/* VULNERABLE: temporary string destroyed after assignment expression; str dangles */
+void f() {
+  const char *str = str_func().c_str();
+  display_string(str);  /* CWE-416: undefined behavior -- dangling pointer */
+}","#include <string>
+
+std::string str_func();
+void display_string(const char *s);
+
+/* SECURE: named variable keeps the string alive past the call */
+void f() {
+  std::string str = str_func();
+  const char *cstr = str.c_str();
+  display_string(cstr);  /* ok: str is still in scope */
+}"
+cwe-476,cpp,func_png_malloc,CERT C EXP34-C (applies in C++); https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/expressions-exp/exp34-c,png_malloc may return null if length+1 wraps to 0; chunkdata used as memcpy destination without null check; fix validates length and checks for null return,"#include <png.h>
+#include <string.h>
+
+/* VULNERABLE: png_malloc may return NULL; used without null check */
+void func(png_structp png_ptr, int length, const void *user_data) {
+  png_charp chunkdata;
+  chunkdata = (png_charp)png_malloc(png_ptr, length + 1);
+  /* ... */
+  memcpy(chunkdata, user_data, length);  /* CWE-476: chunkdata may be NULL */
+  /* ... */
+}","#include <png.h>
+#include <string.h>
+
+/* SECURE: validate length, check user_data and malloc return for NULL */
+void func(png_structp png_ptr, size_t length, const void *user_data) {
+  png_charp chunkdata;
+  if (length == SIZE_MAX) { /* Handle error */ return; }
+  if (NULL == user_data)   { /* Handle error */ return; }
+  chunkdata = (png_charp)png_malloc(png_ptr, length + 1);
+  if (NULL == chunkdata)   { /* Handle error */ return; }
+  /* ... */
+  memcpy(chunkdata, user_data, length);
+  /* ... */
+}"
+cwe-476,cpp,f_malloc_no_null_check,CERT C EXP34-C (applies in C++); https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/expressions-exp/exp34-c,malloc return value not checked before use; if malloc fails c_str is NULL and memcpy dereferences it; also strlen on NULL input_str is UB,"#include <string.h>
+#include <stdlib.h>
+
+/* VULNERABLE: no null check on input_str or malloc return */
+void f(const char *input_str) {
+  size_t size = strlen(input_str) + 1;  /* CWE-476: UB if input_str is NULL */
+  char *c_str = (char *)malloc(size);
+  memcpy(c_str, input_str, size);       /* CWE-476: c_str may be NULL */
+  /* ... */
+  free(c_str);
+  c_str = NULL;
+}","#include <string.h>
+#include <stdlib.h>
+
+/* SECURE: validate input_str and malloc return before use */
+void f(const char *input_str) {
+  if (NULL == input_str) { /* Handle error */ return; }
+  size_t size = strlen(input_str) + 1;
+  char *c_str = (char *)malloc(size);
+  if (NULL == c_str) { /* Handle error */ return; }
+  memcpy(c_str, input_str, size);
+  /* ... */
+  free(c_str);
+  c_str = NULL;
+}"
+cwe-476,cpp,tun_chr_poll,CERT C EXP34-C (applies in C++); https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/expressions-exp/exp34-c,tun->sk accessed before null check of tun; compiler may optimize away the subsequent null check since tun was already dereferenced implying non-null,"/* VULNERABLE: sk = tun->sk dereferences tun BEFORE the null check.
+   Compiler can eliminate the if(!tun) guard as dead code (CWE-476) */
+static unsigned int tun_chr_poll(struct file *file, poll_table *wait) {
+  struct tun_file *tfile = file->private_data;
+  struct tun_struct *tun = __tun_get(tfile);
+  struct sock *sk = tun->sk;  /* dereference before null check */
+  unsigned int mask = 0;
+
+  if (!tun)
+    return POLLERR;  /* guard may be optimized away */
+  /* ... */
+  tun_put(tun);
+  return mask;
+}","/* SECURE: null check performed before dereferencing tun */
+static unsigned int tun_chr_poll(struct file *file, poll_table *wait) {
+  struct tun_file *tfile = file->private_data;
+  struct tun_struct *tun = __tun_get(tfile);
+  struct sock *sk;
+  unsigned int mask = 0;
+
+  if (!tun)
+    return POLLERR;
+  sk = tun->sk;  /* safe: tun verified non-null above */
+  /* ... */
+  tun_put(tun);
+  return mask;
+}"
+cwe-190,cpp,add_unsigned,CERT C INT30-C (applies in C++); https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/integers-int/int30-c,Unsigned addition wraps silently when result exceeds UINT_MAX; wrap to small value may cause insufficient buffer allocation; fix checks for wrap before adding,"#include <climits>
+
+/* VULNERABLE: unsigned wrap not checked; ui_a + ui_b may wrap to 0 */
+void add_unsigned(unsigned int ui_a, unsigned int ui_b) {
+  unsigned int usum = ui_a + ui_b;  /* CWE-190: wraps if > UINT_MAX */
+  /* usum used as allocation size -- too small if wrapped */
+}","#include <climits>
+
+/* SECURE: check for wrap before adding */
+void add_unsigned(unsigned int ui_a, unsigned int ui_b) {
+  if (ui_a > UINT_MAX - ui_b) {
+    /* Handle error: addition would wrap */
+    return;
+  }
+  unsigned int usum = ui_a + ui_b;
+  /* safe to use usum */
+}"
+cwe-190,cpp,add_signed,CERT C INT32-C (applies in C++); https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/integers-int/int32-c,Signed integer addition overflow is undefined behavior; compiler may assume no overflow and eliminate safety checks; fix uses precondition check,"#include <climits>
+
+/* VULNERABLE: signed overflow is undefined behavior */
+void add_signed(signed int si_a, signed int si_b) {
+  signed int sum = si_a + si_b;  /* CWE-190: UB if result > INT_MAX */
+  /* ... */
+}","#include <climits>
+
+/* SECURE: check operands before adding to prevent overflow */
+void add_signed(signed int si_a, signed int si_b) {
+  if (((si_b > 0) && (si_a > (INT_MAX - si_b))) ||
+      ((si_b < 0) && (si_a < (INT_MIN - si_b)))) {
+    /* Handle error */
+    return;
+  }
+  signed int sum = si_a + si_b;
+  /* ... */
+}"
+cwe-190,cpp,multiply_signed,CERT C INT32-C (applies in C++); https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/integers-int/int32-c,Signed integer multiplication can overflow; result used as allocation size may be too small; fix checks for overflow before multiplying,"#include <climits>
+#include <stdlib.h>
+
+/* VULNERABLE: si_a * si_b overflows silently for large values */
+void multiply_signed(signed int si_a, signed int si_b) {
+  signed int result = si_a * si_b;  /* CWE-190: UB on overflow */
+  char *buf = (char *)malloc(result);  /* may allocate tiny buffer */
+  /* ... */
+}","#include <climits>
+#include <stdlib.h>
+
+/* SECURE: detect overflow before multiplication */
+void multiply_signed(signed int si_a, signed int si_b) {
+  if (si_a > 0 && si_b > 0 && si_a > (INT_MAX / si_b)) {
+    /* Handle error */
+    return;
+  }
+  signed int result = si_a * si_b;
+  char *buf = (char *)malloc(result);
+  /* ... */
+}"
+cwe-022,cpp,open_user_file,CERT C FIO02-C (applies in C++); https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/input-output-fio/fio02-c,User-supplied filename appended to base directory without canonicalization; path traversal via ../ sequences escapes the base directory; fix resolves canonical path and validates prefix,"#include <string>
+#include <fstream>
+
+/* VULNERABLE: no canonicalization; ../etc/passwd escapes base dir */
+std::ifstream open_user_file(const std::string &base_dir,
+                              const std::string &user_input) {
+  std::string path = base_dir + ""/"" + user_input;  /* CWE-022: path traversal */
+  return std::ifstream(path);
+}","#include <string>
+#include <fstream>
+#include <filesystem>
+#include <stdexcept>
+
+/* SECURE: canonicalize path and verify it stays within base_dir */
+std::ifstream open_user_file(const std::string &base_dir,
+                              const std::string &user_input) {
+  std::filesystem::path base = std::filesystem::canonical(base_dir);
+  std::filesystem::path full = std::filesystem::weakly_canonical(base / user_input);
+  /* Ensure resolved path is still inside base */
+  auto [base_end, _] = std::mismatch(base.begin(), base.end(), full.begin());
+  if (base_end != base.end()) {
+    throw std::runtime_error(""Path traversal detected"");
+  }
+  return std::ifstream(full);
+}"
+cwe-022,cpp,read_config_file,"Wheeler, Secure-Programs-HOWTO §10.4; https://dwheeler.com/secure-programs/3.71/Secure-Programs-HOWTO.html",Configuration file path built from user input without stripping traversal sequences; attacker can read arbitrary files; fix rejects filenames containing path separators or traversal sequences,"#include <string>
+#include <fstream>
+
+/* VULNERABLE: filename from user input not validated */
+std::string read_config_file(const std::string &config_dir,
+                              const std::string &filename) {
+  std::string path = config_dir + ""/"" + filename;  /* CWE-022 */
+  std::ifstream f(path);
+  return std::string(std::istreambuf_iterator<char>(f),
+                     std::istreambuf_iterator<char>());
+}","#include <string>
+#include <fstream>
+#include <stdexcept>
+
+/* SECURE: reject filenames containing / or .. sequences */
+std::string read_config_file(const std::string &config_dir,
+                              const std::string &filename) {
+  if (filename.find('/') != std::string::npos  ||
+      filename.find('\') != std::string::npos ||
+      filename.find("".."") != std::string::npos) {
+    throw std::runtime_error(""Invalid filename"");
+  }
+  std::string path = config_dir + ""/"" + filename;
+  std::ifstream f(path);
+  return std::string(std::istreambuf_iterator<char>(f),
+                     std::istreambuf_iterator<char>());
+}"
